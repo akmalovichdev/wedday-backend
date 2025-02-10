@@ -68,4 +68,4 @@ class SignIn(Resource):
             logging.error(f"Ошибка при генерации токена: {str(e)}")
             return None
 
-api.add_resource(SignIn, '/api/v1/admin/sign-in')
+api.add_resource(SignIn, '/api/v1/authorization/sign-in')
