@@ -1,226 +1,202 @@
-from api import *
-from data import db
+from flask_restful import Resource
+from flask import request
+import logging
 import jwt
 from data.config import jwtSecretKey
+from data import db
 
-class Card(Resource):
+class Cards(Resource):
+    """
+    POST /api/cards   -> создать карточку
+    GET /api/cards?cardId=... -> получить карточку
+    PUT /api/cards    -> обновить
+    DELETE /api/cards -> удалить
+    Все действия требуют JWT-токен в заголовке Authorization
+    """
+
     def post(self):
-        logging.info('Получен запрос на создание карточки')
+        """
+        Создание карточки.
+        JSON:
+        {
+          "categoryId": 1,
+          "cardName": "My Card",
+          "description": "Some desc",
+          "address": "Tashkent",
+          "locationLat": 41.123,
+          "locationLng": 69.123,
+          "website": "https://example.com",
+          "phoneNumbers": ["+998900001111","+998900002222"],
+          "socialMedias": [
+            {"socialType":"instagram","socialLink":"https://instagram.com/..."}
+          ]
+        }
+        Заголовок: Authorization: <JWT>
+        """
         token = request.headers.get('Authorization')
         if not token:
-            logging.warning('Токен не предоставлен')
+            logging.warning("Токен не предоставлен")
             return {"message": "Token is missing"}, 401
 
         try:
-            payload = jwt.decode(token, jwtSecretKey, algorithms=['HS256'])
-            logging.info(f'Payload из токена: {payload}')
-            staffId = payload['staffId']
-            permissions = db.get.permissions(staffId)
-            logging.debug(f'Права пользователя: {permissions}')
-            if "createCard" not in permissions and permissions != ["*"]:
-                logging.warning('Недостаточно прав для доступа')
-                return {"message": "Insufficient permissions"}, 403
-
-            data = request.get_json(silent=True)
-            logging.debug(f"Полученные данные: {data}")
-            if not data:
-                logging.warning('Недопустимые или отсутствующие данные JSON')
-                return {"message": "Invalid or missing JSON data"}, 400
-
-            category     = data.get('category')
-            name         = data.get('name')
-            comment      = data.get('comment')
-            location     = data.get('location')
-            location2    = data.get('location2')
-            phoneNumbers = data.get('phoneNumbers')  # список до 3 номеров
-            socials      = data.get('socials')       # список соцсетей
-
-            # Проверка обязательных параметров
-            if not all([category, name, comment, location, location2]) or phoneNumbers is None or socials is None:
-                logging.warning('Отсутствуют обязательные параметры')
-                return {"message": "Missing form data parameters"}, 400
-
-            # Проверка phoneNumbers
-            if not isinstance(phoneNumbers, list):
-                logging.warning('phoneNumbers должно быть списком')
-                return {"message": "phoneNumbers must be a list"}, 400
-            if len(phoneNumbers) > 3:
-                logging.warning('Можно добавить максимум 3 номера')
-                return {"message": "Maximum 3 phone numbers allowed"}, 400
-
-            # Проверка socials
-            if not isinstance(socials, list):
-                logging.warning('socials должно быть списком')
-                return {"message": "socials must be a list"}, 400
-
-            cardId = db.add.card(category, name, comment, location, location2, phoneNumbers, socials)
-            logging.debug(f"cardId после добавления: {cardId}")
-            if isinstance(cardId, tuple) and cardId[0] is False:
-                error_message = cardId[1]
-                logging.error(f"Ошибка при создании карточки: {error_message}")
-                return {"message": f"Failed to create card: {error_message}"}, 500
-
-            responseData = {
-                "cardId": cardId,
-                "category": category,
-                "name": name,
-                "comment": comment,
-                "location": location,
-                "location2": location2,
-                "phoneNumbers": phoneNumbers,
-                "socials": socials
-            }
-            logging.info(f"Успешное создание карточки: {responseData}")
-            return responseData, 201
-
+            payload = jwt.decode(token, jwtSecretKey, algorithms=["HS256"])
+            logging.info(f"Payload из токена: {payload}")
         except jwt.ExpiredSignatureError:
-            logging.warning('Токен истек')
             return {"message": "Token has expired"}, 401
         except jwt.InvalidTokenError:
-            logging.warning('Недействительный токен')
             return {"message": "Invalid token"}, 401
-        except Exception as e:
-            logging.error(f'Ошибка при обработке запроса: {str(e)}')
-            return {"message": "An error occurred while processing the token"}, 500
 
-    def get(self, cardId=None):
-        logging.info('Получен запрос на получение данных карточек')
+        userId = payload.get('userId')
+
+        data = request.get_json(silent=True)
+        if not data:
+            return {"message": "No input data"}, 400
+
+        categoryId = data.get('categoryId')
+        cardName = data.get('cardName','').strip()
+        description = data.get('description','')
+        address = data.get('address','')
+        locationLat = data.get('locationLat')
+        locationLng = data.get('locationLng')
+        website = data.get('website','')
+
+        phoneNumbers = data.get('phoneNumbers', [])
+        socialMedias = data.get('socialMedias', [])
+
+        # Лимиты
+        if len(phoneNumbers) > 3:
+            return {"message": "Максимум 3 номера телефона"}, 400
+        if len(socialMedias) > 4:
+            return {"message": "Максимум 4 соцсети"}, 400
+
+        cardId = db.Cards.addCard(
+            userId, categoryId, cardName, description, address,
+            locationLat, locationLng, website
+        )
+        if not cardId:
+            return {"message": "Ошибка при создании карточки"}, 500
+
+        # Добавляем номера
+        if not db.Cards.addPhoneNumbers(cardId, phoneNumbers):
+            return {"message": "Ошибка при добавлении номеров"}, 500
+
+        # Добавляем соцсети
+        if not db.Cards.addSocialMedia(cardId, socialMedias):
+            return {"message": "Ошибка при добавлении соцсетей"}, 500
+
+        logging.info(f"Пользователь {userId} создал карточку {cardId}")
+        return {"message":"Карточка успешно создана","cardId":cardId}, 201
+
+    def get(self):
+        """
+        GET /api/cards?cardId=...
+        Заголовок: Authorization: <JWT>
+        """
         token = request.headers.get('Authorization')
         if not token:
-            logging.warning('Токен не предоставлен')
             return {"message": "Token is missing"}, 401
 
         try:
-            payload = jwt.decode(token, jwtSecretKey, algorithms=['HS256'])
-            logging.info(f'Payload из токена: {payload}')
-            staffId = payload['staffId']
-            permissions = db.get.permissions(staffId)
-            logging.debug(f'Права пользователя: {permissions}')
-            if "viewCard" not in permissions and permissions != ["*"]:
-                logging.warning('Недостаточно прав для доступа')
-                return {"message": "Insufficient permissions"}, 403
-
-            if cardId:
-                card = db.get.card(cardId)
-                logging.debug(f"Полученные данные карточки: {card}")
-                if isinstance(card, tuple) and card[0] is False:
-                    error_message = card[1]
-                    logging.error(f"Ошибка при получении карточки: {error_message}")
-                    return {"message": f"Error receiving data: {error_message}"}, 400
-                return card, 200
-            else:
-                cards = db.get.all_cards()
-                logging.debug(f"Полученные данные карточек: {cards}")
-                if isinstance(cards, tuple) and cards[0] is False:
-                    error_message = cards[1]
-                    logging.error(f"Ошибка при получении карточек: {error_message}")
-                    return {"message": f"Error receiving data: {error_message}"}, 400
-                return {"cards": cards}, 200
-
+            payload = jwt.decode(token, jwtSecretKey, algorithms=["HS256"])
         except jwt.ExpiredSignatureError:
-            logging.warning('Токен истек')
             return {"message": "Token has expired"}, 401
         except jwt.InvalidTokenError:
-            logging.warning('Недействительный токен')
             return {"message": "Invalid token"}, 401
-        except Exception as e:
-            logging.error(f'Ошибка при обработке запроса: {str(e)}')
-            return {"message": "An error occurred while processing the token"}, 500
 
-    def put(self, cardId):
-        logging.info('Получен запрос на обновление карточки')
+        cardId = request.args.get('cardId')
+        if not cardId:
+            return {"message":"Parameter cardId is required"}, 400
+
+        cardData = db.Cards.getCardById(int(cardId))
+        if not cardData:
+            return {"message":"Карточка не найдена"}, 404
+
+        return cardData, 200
+
+    def put(self):
+        """
+        Обновление карточки (может изменить только владелец).
+        JSON:
+        {
+          "cardId":123,
+          "cardName":"Updated",
+          "description":"New desc",
+          "address":"New address",
+          "locationLat":40.1,
+          "locationLng":70.1,
+          "website":"https://updated.com"
+        }
+        Заголовок: Authorization: <JWT>
+        """
         token = request.headers.get('Authorization')
         if not token:
-            logging.warning('Токен не предоставлен')
-            return {"message": "Token is missing"}, 401
+            return {"message":"Token is missing"}, 401
 
         try:
-            payload = jwt.decode(token, jwtSecretKey, algorithms=['HS256'])
-            logging.info(f'Payload из токена: {payload}')
-            staffId = payload['staffId']
-            permissions = db.get.permissions(staffId)
-            logging.debug(f'Права пользователя: {permissions}')
-            if "putCard" not in permissions and permissions != ["*"]:
-                logging.warning('Недостаточно прав для доступа')
-                return {"message": "Insufficient permissions"}, 403
-
-            data = request.get_json(silent=True)
-            logging.debug(f"Полученные данные для обновления: {data}")
-            if not data:
-                logging.warning('Недопустимые или отсутствующие данные JSON')
-                return {"message": "Invalid or missing JSON data"}, 400
-
-            # Допустим, разрешаем обновлять все поля, но cardId не должен изменяться
-            updateResult = db.update.card(cardId, data)
-            if isinstance(updateResult, tuple) and updateResult[0] is False:
-                error_message = updateResult[1]
-                logging.error(f"Ошибка при обновлении карточки: {error_message}")
-                return {"message": f"Failed to update card: {error_message}"}, 500
-
-            card = db.get.card(cardId)
-            if isinstance(card, tuple) and card[0] is False:
-                error_message = card[1]
-                logging.error(f"Ошибка при получении обновлённой карточки: {error_message}")
-                return {"message": f"Error receiving data: {error_message}"}, 400
-
-            logging.info(f"Успешное обновление карточки: {card}")
-            return card, 200
-
+            payload = jwt.decode(token, jwtSecretKey, algorithms=["HS256"])
         except jwt.ExpiredSignatureError:
-            logging.warning('Токен истек')
             return {"message": "Token has expired"}, 401
         except jwt.InvalidTokenError:
-            logging.warning('Недействительный токен')
             return {"message": "Invalid token"}, 401
-        except Exception as e:
-            logging.error(f'Ошибка при обработке запроса: {str(e)}')
-            return {"message": "An error occurred while processing the token"}, 500
 
-    def delete(self, cardId):
-        logging.info('Получен запрос на удаление карточки')
+        userId = payload.get('userId')
+
+        data = request.get_json(silent=True)
+        if not data:
+            return {"message":"No input data"}, 400
+
+        cardId = data.get('cardId')
+        if not cardId:
+            return {"message":"cardId is required"}, 400
+
+        cardName = data.get('cardName','')
+        description = data.get('description','')
+        address = data.get('address','')
+        locationLat = data.get('locationLat')
+        locationLng = data.get('locationLng')
+        website = data.get('website','')
+
+        updated = db.Cards.updateCard(userId, cardId, cardName, description, address, locationLat, locationLng, website)
+        if not updated:
+            # либо карточка не найдена, либо не принадлежит этому userId
+            return {"message":"Ошибка при обновлении (не ваша карточка или не найдена)."}, 400
+
+        logging.info(f"Пользователь {userId} обновил карточку {cardId}")
+        return {"message":"Карточка обновлена"}, 200
+
+    def delete(self):
+        """
+        Удаление карточки (только владелец).
+        JSON:
+        {
+          "cardId":123
+        }
+        Заголовок: Authorization: <JWT>
+        """
         token = request.headers.get('Authorization')
         if not token:
-            logging.warning('Токен не предоставлен')
-            return {"message": "Token is missing"}, 401
+            return {"message":"Token is missing"}, 401
 
         try:
-            payload = jwt.decode(token, jwtSecretKey, algorithms=['HS256'])
-            logging.info(f'Payload из токена: {payload}')
-            staffId = payload['staffId']
-            permissions = db.get.permissions(staffId)
-            logging.debug(f'Права пользователя: {permissions}')
-            if "deleteCard" not in permissions and permissions != ["*"]:
-                logging.warning('Недостаточно прав для доступа')
-                return {"message": "Insufficient permissions"}, 403
-
-            # Проверяем, существует ли карточка
-            if not db.exist.card(cardId):
-                logging.warning(f'Карточка {cardId} не существует')
-                return {"message": f"Card with ID {cardId} does not exist"}, 400
-
-            result = db.delete.card(cardId)
-            if isinstance(result, tuple) and result[0] is False:
-                error_message = result[1]
-                logging.error(f"Ошибка при удалении карточки: {error_message}")
-                return {"message": f"Failed to delete card: {error_message}"}, 500
-
-            logging.info(f"Карточка {cardId} успешно удалена")
-            return {"message": "Card successfully deleted"}, 200
-
+            payload = jwt.decode(token, jwtSecretKey, algorithms=["HS256"])
         except jwt.ExpiredSignatureError:
-            logging.warning('Токен истек')
-            return {"message": "Token has expired"}, 401
+            return {"message":"Token has expired"}, 401
         except jwt.InvalidTokenError:
-            logging.warning('Недействительный токен')
-            return {"message": "Invalid token"}, 401
-        except Exception as e:
-            logging.error(f'Ошибка при обработке запроса: {str(e)}')
-            return {"message": "An error occurred while processing the token"}, 500
+            return {"message":"Invalid token"}, 401
 
-# Регистрируем ресурс. Можно задать два endpoint'а:
-# 1. /api/v1/admin/cards – для работы с коллекцией (POST, GET всех карточек)
-# 2. /api/v1/admin/cards/<int:cardId> – для работы с конкретной карточкой (GET, PUT, DELETE)
-api.add_resource(Card,
-    '/api/v1/admin/cards',
-    '/api/v1/admin/cards/<int:cardId>'
-)
+        userId = payload.get('userId')
+
+        data = request.get_json(silent=True)
+        if not data:
+            return {"message":"No input data"}, 400
+
+        cardId = data.get('cardId')
+        if not cardId:
+            return {"message":"cardId is required"}, 400
+
+        deleted = db.Cards.deleteCard(userId, cardId)
+        if not deleted:
+            return {"message":"Ошибка при удалении (не ваша карточка или не найдена)."}, 400
+
+        logging.info(f"Пользователь {userId} удалил карточку {cardId}")
+        return {"message":"Карточка удалена"}, 200
