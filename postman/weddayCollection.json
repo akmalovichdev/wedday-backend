@@ -1,163 +1,250 @@
 {
-  "info": {
-    "name": "Wedday API",
-    "_postman_id": "b419ad6f-28e6-45a1-82a1-36fdb0a6a8a7",
-    "description": "Collection for Wedday endpoints",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "item": [
-    {
-      "name": "Register (POST)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n    \"email\": \"{{test_email}}\",\n    \"fullName\": \"Test User\",\n    \"password\": \"Abc12345\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/register",
-          "host": ["{{base_url}}"],
-          "path": ["api", "register"]
-        }
-      }
-    },
-    {
-      "name": "Login (POST)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n    \"email\": \"{{test_email}}\",\n    \"password\": \"Abc12345\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/login",
-          "host": ["{{base_url}}"],
-          "path": ["api", "login"]
-        }
-      }
-    },
-    {
-      "name": "Profile (GET)",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{token}}"
-          }
-        ],
-        "url": {
-          "raw": "{{base_url}}/api/profile",
-          "host": ["{{base_url}}"],
-          "path": ["api", "profile"]
-        }
-      }
-    },
-    {
-      "name": "Cards",
-      "item": [
-        {
-          "name": "Create Card (POST)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"categoryId\": {{test_category_id}},\n    \"cardName\": \"My Test Card\",\n    \"description\": \"Some description\",\n    \"address\": \"Tashkent\",\n    \"website\": \"https://example.com\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/cards",
-              "host": ["{{base_url}}"],
-              "path": ["api", "cards"]
-            }
-          }
-        },
-        {
-          "name": "Get Card (GET)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/cards?cardId={{test_card_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "cards"],
-              "query": [
-                {
-                  "key": "cardId",
-                  "value": "{{test_card_id}}"
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Categories",
-      "item": [
-        {
-          "name": "Get Categories (GET)",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/categories",
-              "host": ["{{base_url}}"],
-              "path": ["api", "categories"]
-            }
-          }
-        },
-        {
-          "name": "Create Category (POST)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"categoryName\": \"Photography\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/categories",
-              "host": ["{{base_url}}"],
-              "path": ["api", "categories"]
-            }
-          }
-        }
-      ]
-    }
-  ]
+	"info": {
+		"_postman_id": "7a1e58e9-9eb8-446f-8312-a6afa1952118",
+		"name": "Wedday API",
+		"description": "Collection for Wedday endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "32140875"
+	},
+	"item": [
+		{
+			"name": "Cards",
+			"item": [
+				{
+					"name": "Create Card (POST)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"categoryId\": 1,\n    \"cardName\": \"My Test Card\",\n    \"description\": \"Some description\",\n    \"address\": \"Tashkent\",\n    \"locationLat\": 41.123,\n    \"locationLng\": 69.123,\n    \"website\": \"https://example.com\",\n    \"phoneNumbers\": [\"+998900001111\",\"+998900002222\"],\n    \"socialMedias\": [\n      {\n        \"socialType\":\"instagram\",\n        \"socialLink\":\"https://instagram.com/testprofile\"\n      }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/cards",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"cards"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Card (GET)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/cards?cardId={{test_card_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"cards"
+							],
+							"query": [
+								{
+									"key": "cardId",
+									"value": "{{test_card_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Card (PUT)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"cardId\": 3,\n    \"cardName\": \"Updated Card Name\",\n    \"description\": \"Updated description\",\n    \"address\": \"Updated address\",\n    \"locationLat\": 42.000,\n    \"locationLng\": 70.000,\n    \"website\": \"https://updated-website.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/cards",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"cards"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Card (DELETE)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardId\": 3\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/cards",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"cards"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Get Categories (GET)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/categories",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"categories"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Register (POST)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"fullName\": \"Test User\",\n    \"password\": \"Abc12345\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/register",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"register"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Login (POST)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"test@gmail.com\",\n    \"password\": \"Abc12345\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/login",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Profile (GET)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "{{token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/profile",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"profile"
+					]
+				}
+			},
+			"response": []
+		}
+	]
 }
