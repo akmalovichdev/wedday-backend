@@ -31,6 +31,10 @@ def initDB():
             fullName VARCHAR(255) NOT NULL,
             password VARCHAR(255) NOT NULL,
             avatar VARCHAR(255) DEFAULT NULL,
+            -- Поля для подтверждения почты (если нужно)
+            emailConfirmation TINYINT(1) DEFAULT 0,
+            confirmationCode VARCHAR(50) DEFAULT NULL,
+
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
             updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB;
@@ -44,7 +48,7 @@ def initDB():
         ) ENGINE=InnoDB;
         """)
 
-        # Таблица cards
+        # Таблица cards (добавляем поле tariff VARCHAR(20))
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS cards (
             cardId INT AUTO_INCREMENT PRIMARY KEY,
@@ -56,8 +60,11 @@ def initDB():
             locationLat DECIMAL(10, 6) DEFAULT NULL,
             locationLng DECIMAL(10, 6) DEFAULT NULL,
             website VARCHAR(255) DEFAULT NULL,
+            tariff VARCHAR(20) NOT NULL DEFAULT 'basic',
+
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
             updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
             FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE,
             FOREIGN KEY (categoryId) REFERENCES categories(categoryId) ON DELETE CASCADE
         ) ENGINE=InnoDB;
@@ -116,12 +123,12 @@ def initDB():
         cursor.close()
         conn.close()
 
-
+# -------------------- Класс Users -------------------- #
 class Users:
     @staticmethod
     def createUserWithData(email, fullName, hashedPassword, confirmationCode):
         """
-        Создаёт пользователя с emailConfirmation=0 и пишет confirmationCode
+        Создаёт пользователя (emailConfirmation=0, хранит confirmationCode).
         Возвращает userId или None
         """
         conn = connect()
@@ -147,7 +154,7 @@ class Users:
     @staticmethod
     def updateConfirmationCode(userId, code):
         """
-        Обновляет confirmationCode у пользователя
+        Обновить код верификации email
         """
         conn = connect()
         if not conn:
@@ -173,7 +180,7 @@ class Users:
     @staticmethod
     def confirmEmail(userId):
         """
-        Ставит emailConfirmation=1, confirmationCode=NULL
+        emailConfirmation=1, confirmationCode=NULL
         """
         conn = connect()
         if not conn:
@@ -220,9 +227,16 @@ class Users:
         conn.close()
         return row
 
+# -------------------- Класс Cards -------------------- #
 class Cards:
     @staticmethod
-    def addCard(userId, categoryId, cardName, description, address, locationLat, locationLng, website):
+    def addCard(userId, categoryId, cardName, description,
+                address, locationLat, locationLng,
+                website, tariff):
+        """
+        Создаёт новую карточку, поле 'tariff' (basic/premium) записывается в БД.
+        Возвращает cardId или None.
+        """
         conn = connect()
         if not conn:
             return None
@@ -231,11 +245,12 @@ class Cards:
         try:
             cursor.execute("""
                 INSERT INTO cards
-                (userId, categoryId, cardName, description, address, locationLat, locationLng, website)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                (userId, categoryId, cardName, description, address,
+                 locationLat, locationLng, website, tariff)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
-                userId, categoryId, cardName, description,
-                address, locationLat, locationLng, website
+                userId, categoryId, cardName, description, address,
+                locationLat, locationLng, website, tariff
             ))
             conn.commit()
             cardId = cursor.lastrowid
@@ -248,7 +263,156 @@ class Cards:
         return cardId
 
     @staticmethod
-    def addPhoneNumbers(cardId, phoneNumbers):
+    def updateCardMainFields(userId, cardId, cardName, description,
+                             address, locationLat, locationLng,
+                             website, tariff):
+        """
+        Обновляем основные поля карточки, включая tariff.
+        Не трогаем телефоны, соцсети, фото (они перезаписываются отдельно).
+        Проверяем, что карточка принадлежит userId.
+        """
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            # Проверяем владельца
+            cursor.execute("SELECT userId FROM cards WHERE cardId=%s", (cardId,))
+            row = cursor.fetchone()
+            if not row or row[0] != userId:
+                cursor.close()
+                conn.close()
+                return False
+
+            cursor.execute("""
+                UPDATE cards
+                SET cardName=%s, description=%s, address=%s,
+                    locationLat=%s, locationLng=%s,
+                    website=%s, tariff=%s
+                WHERE cardId=%s
+            """, (
+                cardName, description, address,
+                locationLat, locationLng,
+                website, tariff,
+                cardId
+            ))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка updateCardMainFields: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+    @staticmethod
+    def getCardById(cardId: int):
+        """
+        Возвращает полную информацию о карточке, включая телефоны, соцсети, фото.
+        """
+        conn = connect()
+        if not conn:
+            return None
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM cards WHERE cardId=%s", (cardId,))
+        cardRow = cursor.fetchone()
+        if not cardRow:
+            cursor.close()
+            conn.close()
+            return None
+
+        # Телефоны
+        cursor.execute("SELECT phoneNumber FROM cardPhoneNumbers WHERE cardId=%s", (cardId,))
+        phoneRows = cursor.fetchall()
+
+        # Соцсети
+        cursor.execute("SELECT socialType, socialLink FROM cardSocialMedia WHERE cardId=%s", (cardId,))
+        socialRows = cursor.fetchall()
+
+        # Фото
+        cursor.execute("SELECT photoUrl FROM cardPhotos WHERE cardId=%s", (cardId,))
+        photosRows = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "cardId": cardRow["cardId"],
+            "userId": cardRow["userId"],
+            "categoryId": cardRow["categoryId"],
+            "cardName": cardRow["cardName"],
+            "description": cardRow["description"],
+            "address": cardRow["address"],
+            "locationLat": float(cardRow["locationLat"]) if cardRow["locationLat"] else None,
+            "locationLng": float(cardRow["locationLng"]) if cardRow["locationLng"] else None,
+            "website": cardRow["website"],
+            "tariff": cardRow["tariff"],
+            "createdAt": str(cardRow["createdAt"]),
+            "updatedAt": str(cardRow["updatedAt"]),
+            "phoneNumbers": [p["phoneNumber"] for p in phoneRows],
+            "socialMedias": socialRows,
+            "photos": [ph["photoUrl"] for ph in photosRows]
+        }
+
+    @staticmethod
+    def deleteCard(userId: int, cardId: int):
+        """
+        Удаляем карточку, если она принадлежит userId.
+        """
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            # Проверяем владельца
+            cursor.execute("SELECT userId FROM cards WHERE cardId=%s", (cardId,))
+            row = cursor.fetchone()
+            if not row or row[0] != userId:
+                cursor.close()
+                conn.close()
+                return False
+
+            cursor.execute("DELETE FROM cards WHERE cardId=%s", (cardId,))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка deleteCard: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+    # ----------------------------------------------------------------
+    # Методы для телефонов
+    # ----------------------------------------------------------------
+    @staticmethod
+    def deleteAllPhones(cardId: int):
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM cardPhoneNumbers WHERE cardId=%s", (cardId,))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка deleteAllPhones: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+    @staticmethod
+    def addPhoneNumbers(cardId: int, phoneNumbers: list):
+        """
+        Добавляет список phoneNumbers. Если phoneNumbers пуст, пропускаем.
+        """
         if not phoneNumbers:
             return True
         conn = connect()
@@ -272,8 +436,37 @@ class Cards:
         conn.close()
         return True
 
+    # ----------------------------------------------------------------
+    # Методы для соцсетей
+    # ----------------------------------------------------------------
     @staticmethod
-    def addSocialMedia(cardId, socialMedias):
+    def deleteAllSocials(cardId: int):
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM cardSocialMedia WHERE cardId=%s", (cardId,))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка deleteAllSocials: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+    @staticmethod
+    def addSocialMedia(cardId: int, socialMedias: list):
+        """
+        Добавляет список соцсетей:
+        [
+          {"socialType":"instagram","socialLink":"..."},
+          ...
+        ]
+        """
         if not socialMedias:
             return True
         conn = connect()
@@ -300,79 +493,20 @@ class Cards:
         conn.close()
         return True
 
+    # ----------------------------------------------------------------
+    # Методы для фото
+    # ----------------------------------------------------------------
     @staticmethod
-    def getCardById(cardId: int):
-        conn = connect()
-        if not conn:
-            return None
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM cards WHERE cardId=%s", (cardId,))
-        cardRow = cursor.fetchone()
-        if not cardRow:
-            cursor.close()
-            conn.close()
-            return None
-
-        # Телефоны
-        cursor.execute("SELECT phoneNumber FROM cardPhoneNumbers WHERE cardId=%s", (cardId,))
-        phoneRows = cursor.fetchall()
-
-        # Соцсети
-        cursor.execute("SELECT socialType, socialLink FROM cardSocialMedia WHERE cardId=%s", (cardId,))
-        socialRows = cursor.fetchall()
-
-        cursor.close()
-        conn.close()
-        return {
-            "cardId": cardRow["cardId"],
-            "userId": cardRow["userId"],
-            "categoryId": cardRow["categoryId"],
-            "cardName": cardRow["cardName"],
-            "description": cardRow["description"],
-            "address": cardRow["address"],
-            "locationLat": float(cardRow["locationLat"]) if cardRow["locationLat"] else None,
-            "locationLng": float(cardRow["locationLng"]) if cardRow["locationLng"] else None,
-            "website": cardRow["website"],
-            "createdAt": str(cardRow["createdAt"]),
-            "updatedAt": str(cardRow["updatedAt"]),
-            "phoneNumbers": [p["phoneNumber"] for p in phoneRows],
-            "socialMedias": socialRows
-        }
-
-    @staticmethod
-    def updateCard(userId: int, cardId: int, cardName: str, description: str,
-                   address: str, locationLat, locationLng, website: str):
-        """
-        Обновляем карточку, если она принадлежит userId.
-        """
+    def deleteAllPhotos(cardId: int):
         conn = connect()
         if not conn:
             return False
         cursor = conn.cursor()
         try:
-            # Проверяем, что карточка принадлежит данному userId
-            cursor.execute("SELECT userId FROM cards WHERE cardId=%s", (cardId,))
-            row = cursor.fetchone()
-            if not row or row[0] != userId:
-                # либо карточки нет, либо она чужая
-                cursor.close()
-                conn.close()
-                return False
-
-            # Обновляем
-            cursor.execute("""
-                UPDATE cards
-                SET cardName=%s, description=%s, address=%s,
-                    locationLat=%s, locationLng=%s, website=%s
-                WHERE cardId=%s
-            """, (
-                cardName, description, address,
-                locationLat, locationLng, website,
-                cardId
-            ))
+            cursor.execute("DELETE FROM cardPhotos WHERE cardId=%s", (cardId,))
             conn.commit()
         except Exception as e:
-            logging.error(f"Ошибка updateCard: {e}")
+            logging.error(f"Ошибка deleteAllPhotos: {e}")
             conn.rollback()
             cursor.close()
             conn.close()
@@ -382,27 +516,26 @@ class Cards:
         return True
 
     @staticmethod
-    def deleteCard(userId: int, cardId: int):
+    def addPhotos(cardId: int, photoUrls: list):
         """
-        Удаляем карточку, если она принадлежит userId.
+        Добавляем записи в cardPhotos (photoUrl).
+        photoUrls – список строк (ссылок).
         """
+        if not photoUrls:
+            return True
         conn = connect()
         if not conn:
             return False
         cursor = conn.cursor()
         try:
-            # Проверяем, что карточка принадлежит этому userId
-            cursor.execute("SELECT userId FROM cards WHERE cardId=%s", (cardId,))
-            row = cursor.fetchone()
-            if not row or row[0] != userId:
-                cursor.close()
-                conn.close()
-                return False
-
-            cursor.execute("DELETE FROM cards WHERE cardId=%s", (cardId,))
+            for url in photoUrls:
+                cursor.execute("""
+                    INSERT INTO cardPhotos (cardId, photoUrl)
+                    VALUES (%s, %s)
+                """, (cardId, url))
             conn.commit()
         except Exception as e:
-            logging.error(f"Ошибка deleteCard: {e}")
+            logging.error(f"Ошибка addPhotos: {e}")
             conn.rollback()
             cursor.close()
             conn.close()
@@ -411,12 +544,10 @@ class Cards:
         conn.close()
         return True
 
+# -------------------- Класс Categories -------------------- #
 class Categories:
     @staticmethod
     def getAllCategories():
-        """
-        Получить список всех категорий
-        """
         conn = connect()
         if not conn:
             return []
@@ -429,10 +560,6 @@ class Categories:
 
     @staticmethod
     def addCategory(categoryName):
-        """
-        Добавить новую категорию.
-        Возвращает categoryId или None, если ошибка.
-        """
         conn = connect()
         if not conn:
             return None
@@ -452,9 +579,6 @@ class Categories:
 
     @staticmethod
     def updateCategory(categoryId, categoryName):
-        """
-        Обновить категорию по ID.
-        """
         conn = connect()
         if not conn:
             return False
@@ -474,9 +598,6 @@ class Categories:
 
     @staticmethod
     def deleteCategory(categoryId):
-        """
-        Удалить категорию по ID.
-        """
         conn = connect()
         if not conn:
             return False
@@ -494,11 +615,12 @@ class Categories:
         conn.close()
         return True
 
+# -------------------- Класс FavoritesDB -------------------- #
 class FavoritesDB:
     @staticmethod
     def addFavorite(userId: int, cardId: int):
         """
-        Добавляет запись в favorites. Возвращает True при успехе, False – иначе.
+        Добавить запись в favorites (userId, cardId), с UNIQUE(userId, cardId)
         """
         conn = connect()
         if not conn:
@@ -523,15 +645,15 @@ class FavoritesDB:
     @staticmethod
     def getFavorites(userId: int):
         """
-        Возвращает список любимых карточек для заданного userId.
+        Вернуть список избранных карточек данного userId
         """
         conn = connect()
         if not conn:
             return []
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT f.favoriteId, f.cardId, c.cardName, c.description, c.address,
-                   c.locationLat, c.locationLng, c.website, c.createdAt
+            SELECT f.favoriteId, f.cardId, c.cardName, c.description,
+                   c.address, c.locationLat, c.locationLng, c.website, c.createdAt
             FROM favorites f
             JOIN cards c ON f.cardId = c.cardId
             WHERE f.userId = %s
@@ -545,16 +667,14 @@ class FavoritesDB:
     @staticmethod
     def removeFavorite(userId: int, cardId: int):
         """
-        Удаляет запись из favorites для userId и cardId.
+        Удалить запись из favorites
         """
         conn = connect()
         if not conn:
             return False
         cursor = conn.cursor()
         try:
-            cursor.execute("""
-                DELETE FROM favorites WHERE userId=%s AND cardId=%s
-            """, (userId, cardId))
+            cursor.execute("DELETE FROM favorites WHERE userId=%s AND cardId=%s", (userId, cardId))
             conn.commit()
         except Exception as e:
             logging.error(f"Ошибка removeFavorite: {e}")
