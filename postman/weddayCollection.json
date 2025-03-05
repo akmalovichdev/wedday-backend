@@ -139,6 +139,77 @@
 			]
 		},
 		{
+			"name": "Register",
+			"item": [
+				{
+					"name": "Register (POST)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"fullName\": \"Test User\",\n    \"password\": \"Abc12345\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Email Verification (PUT)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"code\": 123456\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"register"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Get Categories (GET)",
 			"request": {
 				"method": "GET",
@@ -157,39 +228,6 @@
 			"response": []
 		},
 		{
-			"name": "Register (POST)",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json",
-						"type": "text"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"fullName\": \"Test User\",\n    \"password\": \"Abc12345\"\n}",
-					"options": {
-						"raw": {
-							"language": "json"
-						}
-					}
-				},
-				"url": {
-					"raw": "{{base_url}}/api/register",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"api",
-						"register"
-					]
-				}
-			},
-			"response": []
-		},
-		{
 			"name": "Login (POST)",
 			"request": {
 				"method": "POST",
@@ -202,7 +240,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"email\": \"test@gmail.com\",\n    \"password\": \"Abc12345\"\n}",
+					"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"password\": \"Abc12345\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"

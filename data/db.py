@@ -63,7 +63,7 @@ def initDB():
         ) ENGINE=InnoDB;
         """)
 
-        # Телефоны
+        # Таблица cardPhoneNumbers
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS cardPhoneNumbers (
             phoneId INT AUTO_INCREMENT PRIMARY KEY,
@@ -73,7 +73,7 @@ def initDB():
         ) ENGINE=InnoDB;
         """)
 
-        # Соцсети
+        # Таблица cardSocialMedia
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS cardSocialMedia (
             socialId INT AUTO_INCREMENT PRIMARY KEY,
@@ -84,7 +84,7 @@ def initDB():
         ) ENGINE=InnoDB;
         """)
 
-        # Фото (при необходимости)
+        # Таблица cardPhotos
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS cardPhotos (
             photoId INT AUTO_INCREMENT PRIMARY KEY,
@@ -103,12 +103,13 @@ def initDB():
         cursor.close()
         conn.close()
 
+
 class Users:
     @staticmethod
-    def createUserWithData(email, fullName, hashedPassword):
+    def createUserWithData(email, fullName, hashedPassword, confirmationCode):
         """
-        Создаём пользователя (email, fullName, password).
-        Возвращаем userId или None, если ошибка.
+        Создаёт пользователя с emailConfirmation=0 и пишет confirmationCode
+        Возвращает userId или None
         """
         conn = connect()
         if not conn:
@@ -117,9 +118,9 @@ class Users:
         userId = None
         try:
             cursor.execute("""
-                INSERT INTO users (email, fullName, password)
-                VALUES (%s, %s, %s)
-            """, (email, fullName, hashedPassword))
+                INSERT INTO users (email, fullName, password, emailConfirmation, confirmationCode)
+                VALUES (%s, %s, %s, 0, %s)
+            """, (email, fullName, hashedPassword, confirmationCode))
             conn.commit()
             userId = cursor.lastrowid
         except Exception as e:
@@ -129,6 +130,58 @@ class Users:
             cursor.close()
             conn.close()
         return userId
+
+    @staticmethod
+    def updateConfirmationCode(userId, code):
+        """
+        Обновляет confirmationCode у пользователя
+        """
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE users
+                SET confirmationCode=%s
+                WHERE userId=%s
+            """, (code, userId))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка updateConfirmationCode: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+    @staticmethod
+    def confirmEmail(userId):
+        """
+        Ставит emailConfirmation=1, confirmationCode=NULL
+        """
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE users
+                SET emailConfirmation=1, confirmationCode=NULL
+                WHERE userId=%s
+            """, (userId,))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка confirmEmail: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
 
     @staticmethod
     def getUserByEmail(email):

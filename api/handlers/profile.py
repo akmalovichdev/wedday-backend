@@ -41,5 +41,6 @@ class Profile(Resource):
             "email": userRow['email'],
             "fullName": userRow['fullName'],
             "avatar": userRow['avatar'],
+            "emailConfirmation": userRow['emailConfirmation'],
             "createdAt": str(userRow['createdAt'])
         }, 200

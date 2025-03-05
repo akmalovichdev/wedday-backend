@@ -12,7 +12,7 @@ from api.handlers.categories import Categories
 if __name__ == '__main__':
     initDB()  # Проверка/создание таблиц
 
-    api.add_resource(Register, '/api/register')  # POST
+    api.add_resource(Register, '/api/register')  # POST, PUT
     api.add_resource(Login, '/api/login')        # POST
     api.add_resource(Profile, '/api/profile')    # GET
     api.add_resource(Cards, '/api/cards')        # POST,GET,PUT,DELETE
