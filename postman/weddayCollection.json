@@ -17,17 +17,72 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "{{token}}",
-								"type": "text"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
+								"value": "{{token}}"
 							}
 						],
 						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"categoryId\": 1,\n    \"cardName\": \"My Test Card\",\n    \"description\": \"Some description\",\n    \"address\": \"Tashkent\",\n    \"locationLat\": 41.123,\n    \"locationLng\": 69.123,\n    \"website\": \"https://example.com\",\n    \"phoneNumbers\": [\"+998900001111\",\"+998900002222\"],\n    \"socialMedias\": [\n      {\n        \"socialType\":\"instagram\",\n        \"socialLink\":\"https://instagram.com/testprofile\"\n      }\n    ]\n}"
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "tariff",
+									"value": "basic",
+									"type": "text"
+								},
+								{
+									"key": "categoryId",
+									"value": "1",
+									"type": "text"
+								},
+								{
+									"key": "cardName",
+									"value": "Basic Card",
+									"type": "text"
+								},
+								{
+									"key": "description",
+									"value": "Up to 200 chars for basic.",
+									"type": "text"
+								},
+								{
+									"key": "address",
+									"value": "Some address",
+									"type": "text"
+								},
+								{
+									"key": "locationLat",
+									"value": "41.123",
+									"type": "text"
+								},
+								{
+									"key": "locationLng",
+									"value": "69.123",
+									"type": "text"
+								},
+								{
+									"key": "website",
+									"value": "",
+									"description": "Не заполняем в basic",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumbers",
+									"value": "+998900001111",
+									"description": "ровно 1 для basic",
+									"type": "text"
+								},
+								{
+									"key": "socialMedias",
+									"value": "{\"socialType\":\"instagram\",\"socialLink\":\"https://instagram.com/test\"}",
+									"description": "макс 1 для basic",
+									"type": "text"
+								},
+								{
+									"key": "photos",
+									"value": "",
+									"description": "ровно 1 для basic",
+									"type": "file"
+								}
+							]
 						},
 						"url": {
 							"raw": "{{base_url}}/api/cards",
@@ -49,8 +104,7 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "{{token}}",
-								"type": "text"
+								"value": "{{token}}"
 							}
 						],
 						"url": {
@@ -79,17 +133,73 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "{{token}}",
-								"type": "text"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
+								"value": "{{token}}"
 							}
 						],
 						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"cardId\": 3,\n    \"cardName\": \"Updated Card Name\",\n    \"description\": \"Updated description\",\n    \"address\": \"Updated address\",\n    \"locationLat\": 42.000,\n    \"locationLng\": 70.000,\n    \"website\": \"https://updated-website.com\"\n}"
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "cardId",
+									"value": "{{test_card_id}}",
+									"type": "text"
+								},
+								{
+									"key": "tariff",
+									"value": "premium",
+									"type": "text"
+								},
+								{
+									"key": "cardName",
+									"value": "Updated Premium Card",
+									"type": "text"
+								},
+								{
+									"key": "description",
+									"value": "Up to 400 chars for premium.",
+									"type": "text"
+								},
+								{
+									"key": "address",
+									"value": "New address",
+									"type": "text"
+								},
+								{
+									"key": "locationLat",
+									"value": "41.234",
+									"type": "text"
+								},
+								{
+									"key": "locationLng",
+									"value": "69.234",
+									"type": "text"
+								},
+								{
+									"key": "website",
+									"value": "https://premium-card.com",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumbers",
+									"value": "+998900001111",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumbers",
+									"value": "+998900002222",
+									"type": "text"
+								},
+								{
+									"key": "socialMedias",
+									"value": "{\"socialType\":\"instagram\",\"socialLink\":\"https://instagram.com/new\"}",
+									"type": "text"
+								},
+								{
+									"key": "photos",
+									"value": "",
+									"type": "file"
+								}
+							]
 						},
 						"url": {
 							"raw": "{{base_url}}/api/cards",
@@ -111,8 +221,7 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "{{token}}",
-								"type": "text"
+								"value": "{{token}}"
 							},
 							{
 								"key": "Content-Type",
@@ -121,7 +230,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"cardId\": 3\n}"
+							"raw": "{\n  \"cardId\": {{test_card_id}}\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/cards",
@@ -160,30 +269,6 @@
 							"mode": "raw",
 							"raw": "{\n    \"cardId\": {{test_card_id}}\n}"
 						},
-						"url": {
-							"raw": "{{base_url}}/api/favorites",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"favorites"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Get Favorites (GET)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "{{token}}",
-								"type": "text"
-							}
-						],
 						"url": {
 							"raw": "{{base_url}}/api/favorites",
 							"host": [
