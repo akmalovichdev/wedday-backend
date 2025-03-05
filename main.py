@@ -8,6 +8,7 @@ from api.handlers.login import Login
 from api.handlers.profile import Profile
 from api.handlers.cards import Cards
 from api.handlers.categories import Categories
+from api.handlers.favorites import Favorites
 
 if __name__ == '__main__':
     initDB()  # Проверка/создание таблиц
@@ -17,5 +18,6 @@ if __name__ == '__main__':
     api.add_resource(Profile, '/api/profile')    # GET
     api.add_resource(Cards, '/api/cards')        # POST,GET,PUT,DELETE
     api.add_resource(Categories, '/api/categories')  # POST,GET,PUT,DELETE
+    api.add_resource(Favorites, '/api/favorites') # POST, GET, DELETE
 
     app.run(debug=True, host=ip, port=port)

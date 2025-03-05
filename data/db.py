@@ -94,6 +94,19 @@ def initDB():
         ) ENGINE=InnoDB;
         """)
 
+        # Таблица favorites
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS favorites (
+            favoriteId INT AUTO_INCREMENT PRIMARY KEY,
+            userId INT NOT NULL,
+            cardId INT NOT NULL,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE,
+            FOREIGN KEY (cardId) REFERENCES cards(cardId) ON DELETE CASCADE,
+            UNIQUE KEY uniqueFavorite (userId, cardId)
+        ) ENGINE=InnoDB;
+        """)
+
         conn.commit()
         logging.info("Инициализация БД завершена.")
     except Exception as e:
@@ -481,3 +494,74 @@ class Categories:
         conn.close()
         return True
 
+class FavoritesDB:
+    @staticmethod
+    def addFavorite(userId: int, cardId: int):
+        """
+        Добавляет запись в favorites. Возвращает True при успехе, False – иначе.
+        """
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO favorites (userId, cardId)
+                VALUES (%s, %s)
+            """, (userId, cardId))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка addFavorite: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+    @staticmethod
+    def getFavorites(userId: int):
+        """
+        Возвращает список любимых карточек для заданного userId.
+        """
+        conn = connect()
+        if not conn:
+            return []
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT f.favoriteId, f.cardId, c.cardName, c.description, c.address,
+                   c.locationLat, c.locationLng, c.website, c.createdAt
+            FROM favorites f
+            JOIN cards c ON f.cardId = c.cardId
+            WHERE f.userId = %s
+            ORDER BY f.createdAt DESC
+        """, (userId,))
+        favorites = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return favorites
+
+    @staticmethod
+    def removeFavorite(userId: int, cardId: int):
+        """
+        Удаляет запись из favorites для userId и cardId.
+        """
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                DELETE FROM favorites WHERE userId=%s AND cardId=%s
+            """, (userId, cardId))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка removeFavorite: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
