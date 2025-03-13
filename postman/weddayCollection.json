@@ -11,6 +11,184 @@
 			"name": "Cards",
 			"item": [
 				{
+					"name": "Filters (GET)",
+					"item": [
+						{
+							"name": "Get Card by ID (GET)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "{{token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/cards?cardId={{test_card_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"cards"
+									],
+									"query": [
+										{
+											"key": "cardId",
+											"value": "{{test_card_id}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Cards by Category (GET)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "{{token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/cards?categoryId={{test_category_id}}&page=1&perPage=25",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"cards"
+									],
+									"query": [
+										{
+											"key": "categoryId",
+											"value": "{{test_category_id}}"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "perPage",
+											"value": "25"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Cards by User (GET)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "{{token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/cards?userId={{test_user_id}}&page=1&perPage=25",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"cards"
+									],
+									"query": [
+										{
+											"key": "userId",
+											"value": "{{test_user_id}}"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "perPage",
+											"value": "25"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Cards (GET)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "{{token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/cards?page=1&perPage=25",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"cards"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "perPage",
+											"value": "25"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get My Cards (GET)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "{{token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/cards?myCards=true&page=1&perPage=25",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"cards"
+									],
+									"query": [
+										{
+											"key": "myCards",
+											"value": "true"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "perPage",
+											"value": "25"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
 					"name": "Create Card (POST)",
 					"request": {
 						"method": "POST",
@@ -92,35 +270,6 @@
 							"path": [
 								"api",
 								"cards"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Get Card (GET)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "{{token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/cards?cardId={{test_card_id}}",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"cards"
-							],
-							"query": [
-								{
-									"key": "cardId",
-									"value": "{{test_card_id}}"
-								}
 							]
 						}
 					},
@@ -283,6 +432,41 @@
 					"response": []
 				},
 				{
+					"name": "Get Favorite (GET)",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{base_url}}/api/favorites",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"favorites"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Remove Favorite (DELETE)",
 					"request": {
 						"method": "DELETE",
@@ -388,22 +572,142 @@
 			]
 		},
 		{
-			"name": "Get Categories (GET)",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/categories",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"api",
-						"categories"
-					]
+			"name": "Categories",
+			"item": [
+				{
+					"name": "Get Categories (GET)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/categories",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"categories"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Category (POST)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "categoryName",
+									"value": "Photography",
+									"type": "text"
+								},
+								{
+									"key": "logo",
+									"value": "",
+									"type": "file"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/categories",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"categories"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Category (PUT)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "categoryId",
+									"value": "{{test_category_id}}",
+									"type": "text"
+								},
+								{
+									"key": "categoryName",
+									"value": "Updated Category Name",
+									"type": "text"
+								},
+								{
+									"key": "logo",
+									"value": "",
+									"type": "file"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/categories",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"categories"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Category (DELETE)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"categoryId\": {{test_category_id}}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/categories",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"categories"
+							]
+						}
+					},
+					"response": []
 				}
-			},
-			"response": []
+			]
 		},
 		{
 			"name": "Login (POST)",
@@ -439,7 +743,7 @@
 			"response": []
 		},
 		{
-			"name": "Profile (GET)",
+			"name": "Get Profile (GET)",
 			"request": {
 				"method": "GET",
 				"header": [

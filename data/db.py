@@ -42,10 +42,11 @@ def initDB():
 
         # Таблица categories
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS categories (
-            categoryId INT AUTO_INCREMENT PRIMARY KEY,
-            categoryName VARCHAR(255) NOT NULL
-        ) ENGINE=InnoDB;
+            CREATE TABLE IF NOT EXISTS categories (
+                categoryId INT AUTO_INCREMENT PRIMARY KEY,
+                categoryName VARCHAR(255) NOT NULL,
+                logo VARCHAR(255) DEFAULT NULL
+            ) ENGINE=InnoDB;
         """)
 
         # Таблица cards (добавляем поле tariff VARCHAR(20))
@@ -261,6 +262,83 @@ class Cards:
             cursor.close()
             conn.close()
         return cardId
+
+    @staticmethod
+    def getCards(filters, page=1, perPage=25):
+        """
+        Получить список карточек с учетом фильтров и пагинации.
+        filters – словарь с ключами: categoryId, userId (необязательно).
+        Возвращает словарь вида:
+        { "pages": <общее число страниц>, "cards": [ список карточек ] }
+        """
+        conn = connect()
+        if not conn:
+            return {"pages": 0, "cards": []}
+        cursor = conn.cursor(dictionary=True)
+        query = "SELECT * FROM cards"
+        conditions = []
+        params = []
+
+        if 'categoryId' in filters:
+            conditions.append("categoryId = %s")
+            params.append(filters['categoryId'])
+        if 'userId' in filters:
+            conditions.append("userId = %s")
+            params.append(filters['userId'])
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY createdAt DESC"
+
+        # Получаем общее число карточек
+        countQuery = "SELECT COUNT(*) as total FROM cards"
+        if conditions:
+            countQuery += " WHERE " + " AND ".join(conditions)
+        cursor.execute(countQuery, tuple(params))
+        countRow = cursor.fetchone()
+        total = countRow['total'] if countRow and 'total' in countRow else 0
+        pages = (total + perPage - 1) // perPage
+
+        # Добавляем пагинацию
+        offset = (page - 1) * perPage
+        query += " LIMIT %s OFFSET %s"
+        params.extend([perPage, offset])
+        cursor.execute(query, tuple(params))
+        cardRows = cursor.fetchall()
+        cards = []
+        for cardRow in cardRows:
+            cardId = cardRow["cardId"]
+            # Получаем телефоны
+            cursor.execute("SELECT phoneNumber FROM cardPhoneNumbers WHERE cardId=%s", (cardId,))
+            phoneRows = cursor.fetchall()
+            # Получаем соцсети
+            cursor.execute("SELECT socialType, socialLink FROM cardSocialMedia WHERE cardId=%s", (cardId,))
+            socialRows = cursor.fetchall()
+            # Получаем фото
+            cursor.execute("SELECT photoUrl FROM cardPhotos WHERE cardId=%s", (cardId,))
+            photosRows = cursor.fetchall()
+
+            card = {
+                "cardId": cardRow["cardId"],
+                "userId": cardRow["userId"],
+                "categoryId": cardRow["categoryId"],
+                "cardName": cardRow["cardName"],
+                "description": cardRow["description"],
+                "address": cardRow["address"],
+                "locationLat": float(cardRow["locationLat"]) if cardRow["locationLat"] is not None else None,
+                "locationLng": float(cardRow["locationLng"]) if cardRow["locationLng"] is not None else None,
+                "website": cardRow["website"],
+                "tariff": cardRow["tariff"],
+                "createdAt": str(cardRow["createdAt"]),
+                "updatedAt": str(cardRow["updatedAt"]),
+                "phoneNumbers": [p["phoneNumber"] for p in phoneRows],
+                "socialMedias": socialRows,
+                "photos": [ph["photoUrl"] for ph in photosRows]
+            }
+            cards.append(card)
+        cursor.close()
+        conn.close()
+        return {"pages": pages, "cards": cards}
 
     @staticmethod
     def updateCardMainFields(userId, cardId, cardName, description,
@@ -559,14 +637,19 @@ class Categories:
         return categories
 
     @staticmethod
-    def addCategory(categoryName):
+    def addCategory(categoryName, logo=None):
+        """
+        Добавить новую категорию с логотипом.
+        Возвращает categoryId или None.
+        """
         conn = connect()
         if not conn:
             return None
         cursor = conn.cursor()
         categoryId = None
         try:
-            cursor.execute("INSERT INTO categories (categoryName) VALUES (%s)", (categoryName,))
+            cursor.execute("INSERT INTO categories (categoryName, logo) VALUES (%s, %s)",
+                           (categoryName, logo))
             conn.commit()
             categoryId = cursor.lastrowid
         except Exception as e:
@@ -578,13 +661,27 @@ class Categories:
         return categoryId
 
     @staticmethod
-    def updateCategory(categoryId, categoryName):
+    def updateCategory(categoryId, categoryName, logo=None):
+        """
+        Обновить категорию: изменяются имя и логотип (если предоставлен).
+        """
         conn = connect()
         if not conn:
             return False
         cursor = conn.cursor()
         try:
-            cursor.execute("UPDATE categories SET categoryName=%s WHERE categoryId=%s", (categoryName, categoryId))
+            if logo:
+                cursor.execute("""
+                    UPDATE categories
+                    SET categoryName=%s, logo=%s
+                    WHERE categoryId=%s
+                """, (categoryName, logo, categoryId))
+            else:
+                cursor.execute("""
+                    UPDATE categories
+                    SET categoryName=%s
+                    WHERE categoryId=%s
+                """, (categoryName, categoryId))
             conn.commit()
         except Exception as e:
             logging.error(f"Ошибка updateCategory: {e}")
@@ -614,6 +711,7 @@ class Categories:
         cursor.close()
         conn.close()
         return True
+
 
 # -------------------- Класс FavoritesDB -------------------- #
 class FavoritesDB:
@@ -659,7 +757,12 @@ class FavoritesDB:
             WHERE f.userId = %s
             ORDER BY f.createdAt DESC
         """, (userId,))
-        favorites = cursor.fetchall()
+        favoritesRows = cursor.fetchall()
+
+        for favoritesRow in favoritesRows:
+            favoritesRow['createdAt'] = favoritesRow['createdAt'].strftime('%Y-%m-%d %H:%M:%S')
+
+        favorites = [favoritesRow for favoritesRow in favoritesRows]
         cursor.close()
         conn.close()
         return favorites
