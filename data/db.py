@@ -228,6 +228,41 @@ class Users:
         conn.close()
         return row
 
+    @staticmethod
+    def updateProfile(userId, fullName, avatarUrl=None):
+        """
+        Обновляет профиль пользователя: fullName и avatar.
+        Возвращает True при успешном обновлении, иначе False.
+        """
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            if avatarUrl:
+                cursor.execute("""
+                    UPDATE users
+                    SET fullName = %s, avatar = %s
+                    WHERE userId = %s
+                """, (fullName, avatarUrl, userId))
+            else:
+                cursor.execute("""
+                    UPDATE users
+                    SET fullName = %s
+                    WHERE userId = %s
+                """, (fullName, userId))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка updateProfile: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+
 # -------------------- Класс Cards -------------------- #
 class Cards:
     @staticmethod

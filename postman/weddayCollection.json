@@ -710,6 +710,74 @@
 			]
 		},
 		{
+			"name": "Profile",
+			"item": [
+				{
+					"name": "Get Profile (GET)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"profile"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile (PUT)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "fullName",
+									"value": "Updated User Name",
+									"type": "text"
+								},
+								{
+									"key": "avatar",
+									"value": "",
+									"type": "file"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"profile"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Login (POST)",
 			"request": {
 				"method": "POST",
@@ -737,30 +805,6 @@
 					"path": [
 						"api",
 						"login"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Get Profile (GET)",
-			"request": {
-				"method": "GET",
-				"header": [
-					{
-						"key": "Authorization",
-						"value": "{{token}}",
-						"type": "text"
-					}
-				],
-				"url": {
-					"raw": "{{base_url}}/api/profile",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"api",
-						"profile"
 					]
 				}
 			},
