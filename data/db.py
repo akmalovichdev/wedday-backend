@@ -796,7 +796,8 @@ class FavoritesDB:
 
         for favoritesRow in favoritesRows:
             favoritesRow['createdAt'] = favoritesRow['createdAt'].strftime('%Y-%m-%d %H:%M:%S')
-
+            favoritesRow['locationLat'] = str(favoritesRow['locationLat'])
+            favoritesRow['locationLng'] = str(favoritesRow['locationLng'])
         favorites = [favoritesRow for favoritesRow in favoritesRows]
         cursor.close()
         conn.close()
