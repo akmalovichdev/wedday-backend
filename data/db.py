@@ -73,6 +73,17 @@ def initDB():
         ) ENGINE=InnoDB;
         """)
 
+        # Таблица cardPromotions
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cardPromotions (
+            cardPromotionId INT AUTO_INCREMENT PRIMARY KEY,
+            cardId INT NOT NULL,
+            promotionId INT NOT NULL,
+            startDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+            endDate DATETIME
+        ) ENGINE=InnoDB;
+        """)
+
         # Таблица cards
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS cards (
@@ -87,10 +98,7 @@ def initDB():
             locationLng DECIMAL(10, 6) DEFAULT NULL,
             website VARCHAR(255) DEFAULT NULL,
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE,
-            FOREIGN KEY (categoryId) REFERENCES categories(categoryId) ON DELETE CASCADE,
-            FOREIGN KEY (tariffId) REFERENCES tariffs(tariffId) ON DELETE CASCADE
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB;
         """)
 
@@ -100,7 +108,7 @@ def initDB():
             phoneId INT AUTO_INCREMENT PRIMARY KEY,
             cardId INT NOT NULL,
             phoneNumber VARCHAR(20) NOT NULL,
-            FOREIGN KEY (cardId) REFERENCES cards(cardId) ON DELETE CASCADE
+            FOREIGN KEY (cardId) REFERENCES cards(cardId)
         ) ENGINE=InnoDB;
         """)
 
@@ -111,7 +119,7 @@ def initDB():
             cardId INT NOT NULL,
             socialType VARCHAR(100) NOT NULL,
             socialLink VARCHAR(255) NOT NULL,
-            FOREIGN KEY (cardId) REFERENCES cards(cardId) ON DELETE CASCADE
+            FOREIGN KEY (cardId) REFERENCES cards(cardId)
         ) ENGINE=InnoDB;
         """)
 
@@ -121,7 +129,7 @@ def initDB():
             photoId INT AUTO_INCREMENT PRIMARY KEY,
             cardId INT NOT NULL,
             photoUrl VARCHAR(255) NOT NULL,
-            FOREIGN KEY (cardId) REFERENCES cards(cardId) ON DELETE CASCADE
+            FOREIGN KEY (cardId) REFERENCES cards(cardId)
         ) ENGINE=InnoDB;
         """)
 
@@ -132,9 +140,28 @@ def initDB():
             userId INT NOT NULL,
             cardId INT NOT NULL,
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE,
-            FOREIGN KEY (cardId) REFERENCES cards(cardId) ON DELETE CASCADE,
+            FOREIGN KEY (userId) REFERENCES users(userId),
+            FOREIGN KEY (cardId) REFERENCES cards(cardId),
             UNIQUE KEY uniqueFavorite (userId, cardId)
+        ) ENGINE=InnoDB;
+        """)
+
+        # Таблица payments
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS payments (
+            paymentId INT AUTO_INCREMENT PRIMARY KEY,
+            userId INT NOT NULL,
+            cardId INT NOT NULL,           -- к какой карточке относится оплата
+            paymentType VARCHAR(50) NOT NULL,   -- 'tariff' или 'promotion'
+            tariffId INT DEFAULT NULL,     -- если paymentType='tariff', указываем tariffId
+            promotionId INT DEFAULT NULL,  -- если paymentType='promotion', указываем promotionId
+            orderId VARCHAR(255) NOT NULL UNIQUE,
+            amount INT NOT NULL,           -- сумма в тийинах
+            transactionId VARCHAR(255) DEFAULT NULL,
+            state INT NOT NULL DEFAULT 0,  -- 0=pending, 1=created, 2=performed, -1=canceled
+            reason INT DEFAULT NULL,       -- причина отмены, если state=-1
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB;
         """)
 
@@ -380,7 +407,7 @@ class Cards:
                 "locationLat": float(cardRow["locationLat"]) if cardRow["locationLat"] is not None else None,
                 "locationLng": float(cardRow["locationLng"]) if cardRow["locationLng"] is not None else None,
                 "website": cardRow["website"],
-                "tariff": cardRow["tariff"],
+                "tariffId": cardRow["tariffId"],
                 "createdAt": str(cardRow["createdAt"]),
                 "updatedAt": str(cardRow["updatedAt"]),
                 "phoneNumbers": [p["phoneNumber"] for p in phoneRows],
@@ -478,7 +505,7 @@ class Cards:
             "locationLat": float(cardRow["locationLat"]) if cardRow["locationLat"] else None,
             "locationLng": float(cardRow["locationLng"]) if cardRow["locationLng"] else None,
             "website": cardRow["website"],
-            "tariff": cardRow["tariff"],
+            "tariffId": cardRow["tariffId"],
             "createdAt": str(cardRow["createdAt"]),
             "updatedAt": str(cardRow["updatedAt"]),
             "phoneNumbers": [p["phoneNumber"] for p in phoneRows],
@@ -946,3 +973,162 @@ class TariffsDB:
         cursor.close()
         conn.close()
         return rows
+
+# -------------------- Класс PromotionsDB -------------------- #
+class PromotionsDB:
+    @staticmethod
+    def getPromotionById(promotionId):
+        conn = connect()
+        if not conn:
+            return None
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM promotions WHERE promotionId=%s", (promotionId,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return row
+
+    @staticmethod
+    def activatePromotion(cardId, promotionId, durationDays):
+        """
+        Создаёт запись в cardPromotions, где endDate = startDate + durationDays.
+        """
+        conn = connect()
+        if not conn:
+            return None
+        cursor = conn.cursor()
+        cpId = None
+        try:
+            cursor.execute("""
+                INSERT INTO cardPromotions (cardId, promotionId, startDate, endDate)
+                VALUES (%s, %s, NOW(), DATE_ADD(NOW(), INTERVAL %s DAY))
+            """, (cardId, promotionId, durationDays))
+            conn.commit()
+            cpId = cursor.lastrowid
+        except Exception as e:
+            logging.error(f"Ошибка activatePromotion: {e}")
+            conn.rollback()
+        finally:
+            cursor.close()
+            conn.close()
+        return cpId
+
+# -------------------- Класс PaymentsDB -------------------- #
+class PaymentsDB:
+    @staticmethod
+    def createPayment(userId, cardId, paymentType, tariffId, promotionId, orderId, amount):
+        """
+        Создаёт запись в payments (state=0).
+        paymentType='tariff' => tariffId != None
+        paymentType='promotion' => promotionId != None
+        """
+        conn = connect()
+        if not conn:
+            return None
+        cursor = conn.cursor()
+        paymentId = None
+        try:
+            cursor.execute("""
+                INSERT INTO payments
+                (userId, cardId, paymentType, tariffId, promotionId, orderId, amount, state)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 0)
+            """, (userId, cardId, paymentType, tariffId, promotionId, orderId, amount))
+            conn.commit()
+            paymentId = cursor.lastrowid
+        except Exception as e:
+            logging.error(f"Ошибка createPayment: {e}")
+            conn.rollback()
+        finally:
+            cursor.close()
+            conn.close()
+        return paymentId
+
+    @staticmethod
+    def getPaymentByOrderId(orderId):
+        conn = connect()
+        if not conn:
+            return None
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM payments WHERE orderId=%s", (orderId,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return row
+
+    @staticmethod
+    def updatePaymentOnCreateTransaction(orderId, transactionId):
+        """
+        Ставим state=1, прописываем transactionId.
+        """
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE payments
+                SET state=1, transactionId=%s
+                WHERE orderId=%s
+            """, (transactionId, orderId))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка updatePaymentOnCreateTransaction: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+    @staticmethod
+    def updatePaymentOnPerform(orderId):
+        """
+        Ставим state=2 (performed).
+        """
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE payments
+                SET state=2
+                WHERE orderId=%s
+            """, (orderId,))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка updatePaymentOnPerform: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+    @staticmethod
+    def updatePaymentOnCancel(orderId, reason):
+        """
+        Ставим state=-1 (canceled), reason=<причина>.
+        """
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE payments
+                SET state=-1, reason=%s
+                WHERE orderId=%s
+            """, (reason, orderId))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка updatePaymentOnCancel: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True

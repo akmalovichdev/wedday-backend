@@ -25,7 +25,13 @@ class Tariffs(Resource):
             return {"message": "Invalid token"}, 401
 
         tariffs = db.TariffsDB.getAllTariffs()
-        return tariffs, 200
+        result = []
+        for row in tariffs:
+            if "createdAt" in row and row["createdAt"] is not None:
+                row["createdAt"] = str(row["createdAt"])
+            result.append(row)
+
+        return result, 200
 
     def post(self):
         token = request.headers.get('Authorization')

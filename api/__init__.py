@@ -11,13 +11,13 @@ from flask import jsonify
 if not os.path.exists("logs"):
     os.makedirs("logs")
 
-logging.basicConfig(
-    level=logging.INFO,
-    filename=f'logs/{datetime.now().strftime("%Y-%m-%d")}.log',
-    filemode='a',
-    format='%(name)s - %(levelname)s - %(message)s',
-    encoding='utf-8'
-)
+# logging.basicConfig(
+#     level=logging.INFO,
+#     filename=f'logs/{datetime.now().strftime("%Y-%m-%d")}.log',
+#     filemode='a',
+#     format='%(name)s - %(levelname)s - %(message)s',
+#     encoding='utf-8'
+# )
 
 app = Flask(__name__)
 CORS(app)
