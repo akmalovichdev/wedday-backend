@@ -31,10 +31,8 @@ def initDB():
             fullName VARCHAR(255) NOT NULL,
             password VARCHAR(255) NOT NULL,
             avatar VARCHAR(255) DEFAULT NULL,
-            -- Поля для подтверждения почты (если нужно)
             emailConfirmation TINYINT(1) DEFAULT 0,
             confirmationCode VARCHAR(50) DEFAULT NULL,
-
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
             updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB;
@@ -42,32 +40,57 @@ def initDB():
 
         # Таблица categories
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS categories (
-                categoryId INT AUTO_INCREMENT PRIMARY KEY,
-                categoryName VARCHAR(255) NOT NULL,
-                logo VARCHAR(255) DEFAULT NULL
-            ) ENGINE=InnoDB;
+        CREATE TABLE IF NOT EXISTS categories (
+            categoryId INT AUTO_INCREMENT PRIMARY KEY,
+            categoryName VARCHAR(255) NOT NULL
+        ) ENGINE=InnoDB;
         """)
 
-        # Таблица cards (добавляем поле tariff VARCHAR(20))
+        # Таблица tariffs
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tariffs (
+            tariffId INT AUTO_INCREMENT PRIMARY KEY,
+            tariffName VARCHAR(255) NOT NULL,
+            minPhones INT NOT NULL DEFAULT 1,
+            maxPhones INT NOT NULL DEFAULT 1,
+            minSocials INT NOT NULL DEFAULT 0,
+            maxSocials INT NOT NULL DEFAULT 1,
+            minPhotos INT NOT NULL DEFAULT 1,
+            maxPhotos INT NOT NULL DEFAULT 1,
+            maxDescriptionLength INT NOT NULL DEFAULT 200,
+            websiteAllowed TINYINT(1) NOT NULL DEFAULT 0,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB;
+        """)
+
+        # Таблица promotions
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS promotions (
+            promotionId INT AUTO_INCREMENT PRIMARY KEY,
+            promotionName VARCHAR(255) NOT NULL,
+            description VARCHAR(255) DEFAULT NULL,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB;
+        """)
+
+        # Таблица cards
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS cards (
             cardId INT AUTO_INCREMENT PRIMARY KEY,
             userId INT NOT NULL,
             categoryId INT NOT NULL,
+            tariffId INT NOT NULL,
             cardName VARCHAR(255) NOT NULL,
             description TEXT,
             address VARCHAR(255),
             locationLat DECIMAL(10, 6) DEFAULT NULL,
             locationLng DECIMAL(10, 6) DEFAULT NULL,
             website VARCHAR(255) DEFAULT NULL,
-            tariff VARCHAR(20) NOT NULL DEFAULT 'basic',
-
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
             updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
             FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE,
-            FOREIGN KEY (categoryId) REFERENCES categories(categoryId) ON DELETE CASCADE
+            FOREIGN KEY (categoryId) REFERENCES categories(categoryId) ON DELETE CASCADE,
+            FOREIGN KEY (tariffId) REFERENCES tariffs(tariffId) ON DELETE CASCADE
         ) ENGINE=InnoDB;
         """)
 
@@ -262,17 +285,11 @@ class Users:
         conn.close()
         return True
 
-
 # -------------------- Класс Cards -------------------- #
 class Cards:
     @staticmethod
-    def addCard(userId, categoryId, cardName, description,
-                address, locationLat, locationLng,
-                website, tariff):
-        """
-        Создаёт новую карточку, поле 'tariff' (basic/premium) записывается в БД.
-        Возвращает cardId или None.
-        """
+    def addCard(userId, categoryId, tariffId, cardName, description,
+                address, locationLat, locationLng, website):
         conn = connect()
         if not conn:
             return None
@@ -281,12 +298,12 @@ class Cards:
         try:
             cursor.execute("""
                 INSERT INTO cards
-                (userId, categoryId, cardName, description, address,
-                 locationLat, locationLng, website, tariff)
+                (userId, categoryId, tariffId, cardName, description, address,
+                locationLat, locationLng, website)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
-                userId, categoryId, cardName, description, address,
-                locationLat, locationLng, website, tariff
+                userId, categoryId, tariffId, cardName, description, address,
+                locationLat, locationLng, website
             ))
             conn.commit()
             cardId = cursor.lastrowid
@@ -747,7 +764,6 @@ class Categories:
         conn.close()
         return True
 
-
 # -------------------- Класс FavoritesDB -------------------- #
 class FavoritesDB:
     @staticmethod
@@ -824,3 +840,109 @@ class FavoritesDB:
         cursor.close()
         conn.close()
         return True
+
+# -------------------- Класс TariffsDB -------------------- #
+class TariffsDB:
+    @staticmethod
+    def createTariff(tariffName, minPhones, maxPhones, minSocials, maxSocials,
+                     minPhotos, maxPhotos, maxDescLength, websiteAllowed):
+        conn = connect()
+        if not conn:
+            return None
+        cursor = conn.cursor()
+        tariffId = None
+        try:
+            cursor.execute("""
+                INSERT INTO tariffs
+                (tariffName, minPhones, maxPhones, minSocials, maxSocials,
+                 minPhotos, maxPhotos, maxDescriptionLength, websiteAllowed)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (tariffName, minPhones, maxPhones, minSocials, maxSocials,
+                  minPhotos, maxPhotos, maxDescLength, websiteAllowed))
+            conn.commit()
+            tariffId = cursor.lastrowid
+        except Exception as e:
+            logging.error(f"Ошибка createTariff: {e}")
+            conn.rollback()
+        finally:
+            cursor.close()
+            conn.close()
+        return tariffId
+
+    @staticmethod
+    def getTariffById(tariffId):
+        conn = connect()
+        if not conn:
+            return None
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM tariffs WHERE tariffId=%s", (tariffId,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return row
+
+    @staticmethod
+    def updateTariff(tariffId, **kwargs):
+        """
+        Обновляет тариф по указанному tariffId.
+        Принимаем поля в kwargs (tariffName, minPhones, maxPhones, и т.д.)
+        """
+        # Собираем динамически SET
+        sets = []
+        params = []
+        for key, val in kwargs.items():
+            sets.append(f"{key}=%s")
+            params.append(val)
+        if not sets:
+            return False
+
+        query = f"UPDATE tariffs SET {', '.join(sets)} WHERE tariffId=%s"
+        params.append(tariffId)
+
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute(query, tuple(params))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка updateTariff: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+    @staticmethod
+    def deleteTariff(tariffId):
+        conn = connect()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM tariffs WHERE tariffId=%s", (tariffId,))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Ошибка deleteTariff: {e}")
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return False
+        cursor.close()
+        conn.close()
+        return True
+
+    @staticmethod
+    def getAllTariffs():
+        conn = connect()
+        if not conn:
+            return []
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM tariffs ORDER BY tariffId")
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return rows

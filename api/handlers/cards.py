@@ -4,6 +4,7 @@ import logging
 import jwt
 import os
 import json
+import time
 from werkzeug.utils import secure_filename
 from data.config import jwtSecretKey
 from data import db
@@ -12,34 +13,61 @@ UPLOAD_FOLDER = './uploads/cards/'  # Папка, куда сохраняем ф
 
 class Cards(Resource):
     """
-    POST /api/cards      -> Создание карточки
-    GET /api/cards       -> Получение карточек с фильтрами:
-                              - ?cardId=... (конкретная карточка)
-                              - ?categoryId=... (по категории)
-                              - ?userId=... (по пользователю)
-                              - ?myCards=true (только мои карточки, определяется по токену)
-    PUT /api/cards       -> Полное обновление карточки (form-data)
-    DELETE /api/cards    -> Удаление карточки (JSON: { "cardId": ... })
-    Authorization: <token>  (в заголовке, токен передается как есть)
+    POST /api/cards -> Создание карточки (form-data)
+      - tariffId (int) - обязательный
+      - categoryId, cardName, description, address - обязательные
+      - website, locationLat, locationLng - опциональные
+      - phoneNumbers[] (list), socialMedias[] (list of JSON), photos (files)
+      - Валидация происходит на основе таблицы tariffs (minPhones/maxPhones, и т.д.)
+
+    GET /api/cards -> получение карточек с фильтрами:
+      - ?cardId=... (конкретная карточка)
+      - ?categoryId=... (по категории)
+      - ?userId=... (по пользователю)
+      - ?myCards=true (если нужно только карточки текущего пользователя)
+      - page, perPage для пагинации (по умолчанию 1 и 25)
+
+    PUT /api/cards -> обновление (form-data), аналогично POST
+      - Нужно указать cardId
+      - Если хотим изменить тариф, передаём новый tariffId
+      - phoneNumbers, socialMedias, photos перезаписываются (удаляем, вставляем заново)
+
+    DELETE /api/cards -> удаление (JSON: {"cardId": N})
+
+    Авторизация: токен в заголовке Authorization (без префикса Bearer)
     """
 
     def post(self):
-        # 1) Проверка токена
+        # Авторизация
         token = request.headers.get('Authorization')
         if not token:
             logging.warning("Токен не предоставлен")
-            return {"message": "Token is missing"}, 401
+            return {"message": "Токен не предоставлен"}, 401
         try:
             payload = jwt.decode(token, jwtSecretKey, algorithms=["HS256"])
         except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
-            return {"message": "Invalid or expired token"}, 401
+            logging.warning("Недействительный или просроченный токен")
+            return {"message": "Недействительный или просроченный токен"}, 401
+
         userId = payload.get('userId')
         if not userId:
-            return {"message": "Invalid token payload"}, 401
+            return {"message": "Некорректный токен (отсутствует userId)"}, 401
 
-        # 2) Считываем поля формы
+        # Считываем поля
         form = request.form
-        tariff = form.get('tariff', 'basic').lower()
+        tariffIdStr = form.get('tariffId')
+        if not tariffIdStr:
+            return {"message": "tariffId is required"}, 400
+        try:
+            tariffId = int(tariffIdStr)
+        except ValueError:
+            return {"message": "tariffId must be integer"}, 400
+
+        # Получаем тариф из БД
+        tariffRow = db.TariffsDB.getTariffById(tariffId)
+        if not tariffRow:
+            return {"message": f"Тариф с ID={tariffId} не найден"}, 400
+
         categoryId = form.get('categoryId')
         cardName = form.get('cardName','').strip()
         description = form.get('description','')
@@ -59,9 +87,7 @@ class Cards(Resource):
                 pass
         photos = request.files.getlist('photos')
 
-        # 3) Валидация тарифа
-        if tariff not in ['basic','premium']:
-            return {"message": "tariff must be 'basic' or 'premium'"}, 400
+        # Валидация полей
         if not categoryId:
             return {"message": "categoryId is required"}, 400
         if not cardName:
@@ -71,69 +97,79 @@ class Cards(Resource):
         if not address:
             return {"message": "address is required"}, 400
 
-        maxDesc = 400 if tariff == 'premium' else 200
+        # Проверка описания
+        maxDesc = tariffRow['maxDescriptionLength']
         if len(description) > maxDesc:
-            return {"message": f"Описание превышает лимит {maxDesc} символов для тарифа {tariff}"}, 400
-        if tariff == 'basic' and website:
-            return {"message": "Website доступен только в тарифе premium"}, 400
+            return {"message": f"Описание превышает лимит {maxDesc} символов для данного тарифа"}, 400
 
-        if tariff == 'basic':
-            if len(phoneNumbers) != 1:
-                return {"message": "Для тарифа basic нужен ровно 1 номер телефона"}, 400
-        else:
-            if not (1 <= len(phoneNumbers) <= 3):
-                return {"message": "Для тарифа premium нужно от 1 до 3 номеров телефона"}, 400
+        # Проверка website
+        if not tariffRow['websiteAllowed'] and website:
+            return {"message": "В данном тарифе нельзя указывать website"}, 400
 
-        maxSocials = 1 if tariff == 'basic' else 4
-        if len(socialMedias) > maxSocials:
-            return {"message": f"Максимум {maxSocials} соцсетей для тарифа {tariff}"}, 400
+        # Телефоны
+        minPhones = tariffRow['minPhones']
+        maxPhones = tariffRow['maxPhones']
+        if not (minPhones <= len(phoneNumbers) <= maxPhones):
+            return {"message": f"Нужно от {minPhones} до {maxPhones} номеров телефона для данного тарифа"}, 400
 
-        if tariff == 'basic':
-            if len(photos) != 1:
-                return {"message": "Для тарифа basic нужно ровно 1 фото"}, 400
-        else:
-            if not (1 <= len(photos) <= 5):
-                return {"message": "Для тарифа premium нужно от 1 до 5 фото"}, 400
+        # Соцсети
+        minSocials = tariffRow['minSocials']
+        maxSocials = tariffRow['maxSocials']
+        if not (minSocials <= len(socialMedias) <= maxSocials):
+            return {"message": f"Нужно от {minSocials} до {maxSocials} соцсетей для данного тарифа"}, 400
 
+        # Фото
+        minPhotos = tariffRow['minPhotos']
+        maxPhotos = tariffRow['maxPhotos']
+        if not (minPhotos <= len(photos) <= maxPhotos):
+            return {"message": f"Нужно от {minPhotos} до {maxPhotos} фото для данного тарифа"}, 400
+
+        # Преобразуем
         latVal = float(locationLat) if locationLat else None
         lngVal = float(locationLng) if locationLng else None
         catId = int(categoryId)
 
-        # 5) Создаём запись в БД
+        # Создаём карточку
         cardId = db.Cards.addCard(
             userId=userId,
             categoryId=catId,
+            tariffId=tariffId,  # <-- теперь передаём tariffId
             cardName=cardName,
             description=description,
             address=address,
             locationLat=latVal,
             locationLng=lngVal,
-            website=website,
-            tariff=tariff
+            website=website
         )
         if not cardId:
+            logging.error("Ошибка при создании карточки (addCard вернул None)")
             return {"message": "Ошибка при создании карточки"}, 500
 
-        if not self._overwritePhones(cardId, phoneNumbers):
+        # Телефоны
+        if not db.Cards.addPhoneNumbers(cardId, phoneNumbers):
             return {"message": "Ошибка при добавлении телефонов"}, 500
-        if not self._overwriteSocials(cardId, socialMedias):
+
+        # Соцсети
+        if not db.Cards.addSocialMedia(cardId, socialMedias):
             return {"message": "Ошибка при добавлении соцсетей"}, 500
 
+        # Фотографии
         if not os.path.exists(UPLOAD_FOLDER):
             os.makedirs(UPLOAD_FOLDER, exist_ok=True)
         photoUrls = []
         for file in photos:
             filename = secure_filename(file.filename)
-            uniqueName = f"{cardId}_{filename}"
-            filepath = os.path.join(UPLOAD_FOLDER, uniqueName)
-            file.save(filepath)
+            uniqueName = f"{cardId}_{int(time.time())}_{filename}"
+            file.save(os.path.join(UPLOAD_FOLDER, uniqueName))
             photoUrl = f"/uploads/cards/{uniqueName}"
             photoUrls.append(photoUrl)
-        if not self._overwritePhotos(cardId, photoUrls):
+
+        if not db.Cards.addPhotos(cardId, photoUrls):
             return {"message": "Ошибка при сохранении фото"}, 500
 
-        logging.info(f"[userId={userId}] Создал карточку cardId={cardId}, тариф={tariff}")
+        logging.info(f"[userId={userId}] Создал карточку cardId={cardId}, тарифId={tariffId}")
         return {"message": "Карточка успешно создана", "cardId": cardId}, 201
+
 
     def get(self):
         token = request.headers.get('Authorization')
@@ -144,22 +180,18 @@ class Cards(Resource):
         except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
             return {"message": "Invalid or expired token"}, 401
 
-        # Фильтры: можно передать cardId, categoryId, userId, myCards, а также параметры пагинации: page, perPage
         cardId = request.args.get('cardId')
         categoryId = request.args.get('categoryId')
         filterUserId = request.args.get('userId')
         myCards = request.args.get('myCards')
-
-        # Если myCards=true, берем userId из токена
-        if myCards and myCards.lower() == "true":
-            filterUserId = payload.get('userId')
-
-        # Параметры пагинации
         try:
             page = int(request.args.get('page', 1))
             perPage = int(request.args.get('perPage', 25))
         except ValueError:
-            return {"message": "page and perPage must be integers"}, 400
+            return {"message": "page и perPage должны быть целыми числами"}, 400
+
+        if myCards and myCards.lower() == "true":
+            filterUserId = payload.get('userId')
 
         if cardId:
             cardData = db.Cards.getCardById(int(cardId))
@@ -173,8 +205,9 @@ class Cards(Resource):
             if filterUserId:
                 filters['userId'] = int(filterUserId)
             result = db.Cards.getCards(filters, page=page, perPage=perPage)
-            # result имеет формат: {"pages": pages, "cards": [...]}
+            # Возвращаем {"pages": ..., "cards": [...]}
             return result, 200
+
 
     def put(self):
         token = request.headers.get('Authorization')
@@ -190,11 +223,27 @@ class Cards(Resource):
             return {"message": "Invalid token payload"}, 401
 
         form = request.form
-        cardId = form.get('cardId')
-        if not cardId:
+        cardIdStr = form.get('cardId')
+        if not cardIdStr:
             return {"message": "cardId is required"}, 400
+        try:
+            cardId = int(cardIdStr)
+        except:
+            return {"message": "cardId must be integer"}, 400
 
-        tariff = form.get('tariff','basic').lower()
+        # Считываем tariffId
+        tariffIdStr = form.get('tariffId')
+        if not tariffIdStr:
+            return {"message": "tariffId is required"}, 400
+        try:
+            tariffId = int(tariffIdStr)
+        except:
+            return {"message": "tariffId must be integer"}, 400
+
+        tariffRow = db.TariffsDB.getTariffById(tariffId)
+        if not tariffRow:
+            return {"message": f"Тариф с ID={tariffId} не найден"}, 400
+
         cardName = form.get('cardName','').strip()
         description = form.get('description','')
         address = form.get('address','')
@@ -213,8 +262,6 @@ class Cards(Resource):
                 pass
         photos = request.files.getlist('photos')
 
-        if tariff not in ['basic','premium']:
-            return {"message": "tariff must be 'basic' or 'premium'"}, 400
         if not cardName:
             return {"message": "cardName is required"}, 400
         if not description:
@@ -222,47 +269,46 @@ class Cards(Resource):
         if not address:
             return {"message": "address is required"}, 400
 
-        maxDesc = 400 if tariff == 'premium' else 200
+        maxDesc = tariffRow['maxDescriptionLength']
         if len(description) > maxDesc:
-            return {"message": f"Описание превышает лимит {maxDesc} символов для {tariff}"}, 400
-        if tariff == 'basic' and website:
-            return {"message": "Website доступен только в тарифе premium"}, 400
+            return {"message": f"Описание превышает лимит {maxDesc} символов для тарифа ID={tariffId}"}, 400
 
-        if tariff == 'basic':
-            if len(phoneNumbers) != 1:
-                return {"message": "Для тарифа basic нужен ровно 1 номер телефона"}, 400
-        else:
-            if not (1 <= len(phoneNumbers) <= 3):
-                return {"message": "Для тарифа premium нужно от 1 до 3 номеров телефона"}, 400
+        if not tariffRow['websiteAllowed'] and website:
+            return {"message": "В данном тарифе нельзя указывать website"}, 400
 
-        maxSocials = 1 if tariff == 'basic' else 4
-        if len(socialMedias) > maxSocials:
-            return {"message": f"Максимум {maxSocials} соцсетей для {tariff}"}, 400
+        minPhones = tariffRow['minPhones']
+        maxPhones = tariffRow['maxPhones']
+        if not (minPhones <= len(phoneNumbers) <= maxPhones):
+            return {"message": f"Нужно от {minPhones} до {maxPhones} телефонов для данного тарифа"}, 400
 
-        if tariff == 'basic':
-            if len(photos) != 1:
-                return {"message": "Для тарифа basic нужно ровно 1 фото"}, 400
-        else:
-            if not (1 <= len(photos) <= 5):
-                return {"message": "Для тарифа premium нужно от 1 до 5 фото"}, 400
+        minSocials = tariffRow['minSocials']
+        maxSocials = tariffRow['maxSocials']
+        if not (minSocials <= len(socialMedias) <= maxSocials):
+            return {"message": f"Нужно от {minSocials} до {maxSocials} соцсетей для данного тарифа"}, 400
+
+        minPhotos = tariffRow['minPhotos']
+        maxPhotos = tariffRow['maxPhotos']
+        if not (minPhotos <= len(photos) <= maxPhotos):
+            return {"message": f"Нужно от {minPhotos} до {maxPhotos} фото для данного тарифа"}, 400
 
         latVal = float(locationLat) if locationLat else None
         lngVal = float(locationLng) if locationLng else None
 
         okMain = db.Cards.updateCardMainFields(
             userId=userId,
-            cardId=int(cardId),
+            cardId=cardId,
+            tariffId=tariffId,
             cardName=cardName,
             description=description,
             address=address,
             locationLat=latVal,
             locationLng=lngVal,
-            website=website,
-            tariff=tariff
+            website=website
         )
         if not okMain:
             return {"message": "Ошибка при обновлении (не ваша карточка или не найдена)"}, 400
 
+        # Перезаписываем телефоны / соцсети / фото
         if not self._overwritePhones(cardId, phoneNumbers):
             return {"message": "Ошибка при обновлении телефонов"}, 500
 
@@ -274,22 +320,21 @@ class Cards(Resource):
         photoUrls = []
         for file in photos:
             filename = secure_filename(file.filename)
-            uniqueName = f"{cardId}_{filename}"
-            filepath = os.path.join(UPLOAD_FOLDER, uniqueName)
-            file.save(filepath)
+            uniqueName = f"{cardId}_{int(time.time())}_{filename}"
+            file.save(os.path.join(UPLOAD_FOLDER, uniqueName))
             photoUrl = f"/uploads/cards/{uniqueName}"
             photoUrls.append(photoUrl)
 
         if not self._overwritePhotos(cardId, photoUrls):
-            return {"message": "Ошибка при обновлении фото"}, 500
+            return {"message":"Ошибка при обновлении фото"}, 500
 
-        logging.info(f"[userId={userId}] Обновил карточку cardId={cardId}, тариф={tariff}")
-        return {"message": "Карточка обновлена"}, 200
+        logging.info(f"[userId={userId}] Обновил карточку cardId={cardId}, тарифId={tariffId}")
+        return {"message":"Карточка обновлена"}, 200
 
     def delete(self):
         token = request.headers.get('Authorization')
         if not token:
-            return {"message": "Token is missing"}, 401
+            return {"message":"Token is missing"}, 401
         try:
             payload = jwt.decode(token, jwtSecretKey, algorithms=["HS256"])
         except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
@@ -297,21 +342,21 @@ class Cards(Resource):
 
         userId = payload.get('userId')
         if not userId:
-            return {"message": "Invalid token payload"}, 401
+            return {"message":"Invalid token payload"}, 401
 
         data = request.get_json(silent=True)
         if not data:
-            return {"message": "No input data"}, 400
+            return {"message":"No input data"}, 400
         cardId = data.get('cardId')
         if not cardId:
-            return {"message": "cardId is required"}, 400
+            return {"message":"cardId is required"}, 400
 
         deleted = db.Cards.deleteCard(userId, cardId)
         if not deleted:
-            return {"message": "Ошибка при удалении (не ваша карточка или не найдена)"}, 400
+            return {"message":"Ошибка при удалении (не ваша карточка или не найдена)"}, 400
 
         logging.info(f"[userId={userId}] Удалил карточку cardId={cardId}")
-        return {"message": "Карточка удалена"}, 200
+        return {"message":"Карточка удалена"}, 200
 
     # ----------------- Вспомогательные методы ----------------- #
 
