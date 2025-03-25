@@ -11,6 +11,7 @@ from api.handlers.categories import Categories
 from api.handlers.favorites import Favorites
 from api.handlers.tariffs import Tariffs
 from api.handlers.payments import PaymentsGenerate, PaymeWebhook
+from api.handlers.categoryProducts import CategoriesWithCards
 
 if __name__ == '__main__':
     initDB()  # Проверка/создание таблиц
@@ -24,5 +25,6 @@ if __name__ == '__main__':
     api.add_resource(Tariffs, '/api/tariffs')     # POST, GET, PUT, DELETE
     api.add_resource(PaymentsGenerate, "/api/payments/generate")  # POST
     api.add_resource(PaymeWebhook, '/api/payments/webhook')  # POST
+    api.add_resource(CategoriesWithCards, '/api/categories/with_cards')
 
     app.run(debug=True, host=ip, port=port)
