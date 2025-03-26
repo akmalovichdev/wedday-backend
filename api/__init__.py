@@ -11,17 +11,29 @@ from flask import jsonify
 if not os.path.exists("logs"):
     os.makedirs("logs")
 
-# logging.basicConfig(
-#     level=logging.INFO,
-#     filename=f'logs/{datetime.now().strftime("%Y-%m-%d")}.log',
-#     filemode='a',
-#     format='%(name)s - %(levelname)s - %(message)s',
-#     encoding='utf-8'
-# )
+logging.basicConfig(
+    level=logging.INFO,
+    filename=f'logs/{datetime.now().strftime("%Y-%m-%d")}.log',
+    filemode='a',
+    format='%(name)s - %(levelname)s - %(message)s',
+    encoding='utf-8'
+)
+
+
+from flask import send_from_directory, abort
 
 app = Flask(__name__)
 CORS(app)
 api = Api(app)
+
+# Например, все статичные файлы лежат в каталоге "static" в корне проекта.
+@app.route('/uploads/<path:filename>')
+def static_files(filename):
+    static_dir = os.path.join(os.getcwd(), 'uploads')
+    if os.path.isfile(os.path.join(static_dir, filename)):
+        return send_from_directory(static_dir, filename)
+    else:
+        abort(404)
 
 @app.errorhandler(Exception)
 def handle_exception(e):

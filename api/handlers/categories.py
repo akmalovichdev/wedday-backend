@@ -7,7 +7,7 @@ from werkzeug.utils import secure_filename
 from data.config import jwtSecretKey
 from data import db
 
-UPLOAD_FOLDER_CATEGORIES = './uploads/categories/'
+UPLOAD_FOLDER_CATEGORIES = './static/uploads/categories/'
 
 class Categories(Resource):
     """

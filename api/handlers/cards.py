@@ -9,7 +9,7 @@ from werkzeug.utils import secure_filename
 from data.config import jwtSecretKey
 from data import db
 
-UPLOAD_FOLDER = './uploads/cards/'  # Папка, куда сохраняем фото
+UPLOAD_FOLDER = './static/uploads/cards/'  # Папка, куда сохраняем фото
 
 class Cards(Resource):
     """

@@ -7,7 +7,7 @@ from werkzeug.utils import secure_filename
 from data.config import jwtSecretKey
 from data import db
 
-UPLOAD_FOLDER_PROFILE = './uploads/profile/'  # Папка для сохранения аватарок
+UPLOAD_FOLDER_PROFILE = './static/uploads/profile/'  # Папка для сохранения аватарок
 
 class Profile(Resource):
     """
